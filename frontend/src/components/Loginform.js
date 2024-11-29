@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import { Oval } from 'react-loader-spinner'; // Импортируем компонент загрузки в виде крутящегося спиннера
 
 function LoginForm() {
@@ -14,6 +14,8 @@ function LoginForm() {
         setLoading(true); // Set loading to true
         controllerRef.current = new AbortController(); // Создаем новый AbortController
         const [canceling, setCanceling] = useState(false); // Состояние для омтмены
+        console.log('Username:', username, 'Password:', password);
+    };
 
         try {
             const response = await fetch('/login', { // Запрос на backend
@@ -31,7 +33,7 @@ function LoginForm() {
                 } else if (response.status === 400) {
                     setError(data.error || 'Bad Request'); // Use data.error if available
                 } else {
-                    setError('An unexpected error occurred.');
+                    setError('Произошла непредвиденная ошибка.');
                 } 
             } else { // Переход на экран №2
                 const data = await response.json(); // Get data from successful response
@@ -60,7 +62,7 @@ function LoginForm() {
     };
 
     return (
-        <form onSubmit={handleSubmit}>
+        <form onSubmit={handleSubmit} className="max-w-sm mx auto p-6 bg-white rounded-lg shadow-md">
             {error && <div style={{ color: 'red' }}>{error}</div>} // Display error message
             <div>
                 <label htmlFor="username">Логин</label>

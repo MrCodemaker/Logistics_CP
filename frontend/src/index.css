@@ -1,0 +1,86 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Дополнительные базовые стили */
+@layer base {
+    /* Базовые стили для светлой темы */
+    body {
+        @apply bg-gray-50 text-gray-900 transition-colors duration-200;
+    }
+
+    /* Стили для темной темы */
+    .dark body {
+        @apply bg-gray-900 text-gray-100;
+
+    h1 {
+        @apply text-2xl font-bold;
+    }
+
+    h2 {
+        @apply text-xl font-semibold;
+    }
+}
+
+/* Пользовательские компоненты */
+@layer components {
+    .btn {
+        @apply px-4 py-2 rounded-lg font-medium transition-colors duration-200;
+    }
+
+    .btn-primary {
+        @apply btn bg-blue-500 text-white hover:bg-blue-600;
+    }
+
+    .btn-secondary {
+        @apply btn bg-gray-200 text-gray-800 hover:bg-gray-300;
+    }
+
+    .input {
+        @apply w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent;
+    }
+    
+    /* Компоненты с поддержкой темной темы */
+    .card {
+        @apply bg-white dark:bg-gray-800 rounded-lg shadow-lg p-6 
+               transition-all duration-200 hover:shadow-xl;
+    }
+
+    .btn-primary {
+        @apply px-4 py-2 rounded-lg font-medium
+               bg-gradient-to-r from-blue-500 to-blue-600
+               hover:from-blue-600 hover:to-blue-700
+               text-white transform transition-all
+               hover:scale-105 active:scale-95;
+    }
+
+    .input-field {
+        @apply w-full px-4 py-2 rounded-lg
+               border border-gray-300 dark:border-gray-600
+               bg-white dark:bg-gray-700
+               focus:ring-2 focus:ring-blue-500
+               transition-colors duration-200;
+    }
+    /* Анимации для страниц */
+    .page-transition {
+        @apply animate-fade-in;
+    }
+
+    /* Прогресс-бар */
+    .progress-bar {
+        @apply h-2 bg-blue-500 rounded-full
+           transition-all duration-200;
+    }
+
+    .progress-container {
+        @apply w-full h-2 bg-gray-200 dark:bg-gray-700
+           rounded-full overflow-hidden;
+    }
+}
+
+/* Утилиты */
+@layer utilities {
+    .text-shadow {
+        text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.1);
+    }
+}
