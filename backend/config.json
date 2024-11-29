@@ -1,0 +1,24 @@
+config = [
+    {    
+        "sheet_name": "service_list",
+        "data_mapping": {
+            "step_1": "F22",
+            "step_2": "F23",
+            "step_3": "F24",
+            "step_1_deadline": "B14",
+            "step_2_deadline": "B15",
+            "step_3_deadline": "B16",
+            "total_deadline": "B18",
+            "tax": "E18",
+            "total_tax": "F18"
+        }
+    },
+    {
+        "sheet_name": "another_sheet",
+        "data_mapping": {
+            "value1": "A1",
+            "value2": "B2",
+            "value3": "C3"
+        }
+    }
+]
