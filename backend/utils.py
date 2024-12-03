@@ -1,21 +1,31 @@
 from pydoc import doc
 import openpyxl
+import pandas as pd
 from docx import Document
 from docx.shared import Inches, Pt
 from docx.enum.text import WD_ALIGN_PARAGRAPH
-from logging
-import json
+from logging import json
 from pathlib import Path
-from typing import Dict, Optional, Any
+from typing import Dict, Optional, Any, Tuple, List
 from datetime import datetime
 from flask import logging, render_template
+from celery import shared_task
+from .error_handler import ValidationError, FileError, log_error
 
 
-"""Настраивает систему логирования с ротацией файлов"""
+# Добавляем кастомные исключения для обработки ошибок"""
+class ExcelValidationError(Exception):
+    """Кастомное исключение для ошибок валидации"""
+    pass
+
+class ExcelProcessingError(Exception):
+    """Кастомное исключение для ошибок обработки"""
+    pass
+
 def setup_logging():
+    """Настраиваем систему логирования с ротацией файлов"""
     log_dir = Path("logs")
     log_dir.mkdir(exist_ok=True)
-
     log_file = log_dir / f"app_{datetime.now().strftime('%Y%m%d')}.log"
 
     logging.basicConfig(
@@ -26,6 +36,7 @@ def setup_logging():
             logging.StreamHandler() # Также выводим в консоль
         ]
     )
+
 """
     Загружает конфигурацию из JSON-файла
     Args:
@@ -48,6 +59,7 @@ def load_config(config_path: str) -> Dict:
     except json.JSONDecodeError:
         logging.error(f"Файл конфигурации '{config_path}' содержит некорректный JSON.")
         raise
+
 """
     Обрабатывает Excel-файл и извлекает данные согласно конфигурации
     
@@ -95,6 +107,7 @@ def process_excel(file_path: str, config: Dict) -> Optional[Dict[str, Any]]:
     except Exception as e:
         logging.exception("Ошибка при обработке Excel файла")
         return None
+
 """
     Генерирует Word-документ на основе шаблона и данных
     
@@ -138,6 +151,7 @@ def generate_word(data: Dict[str, Any], template_path: str, output_path: str) ->
     except Exception as e:
         logging.exception("Ошибка при генерации Word документа")
         return None
+
 """
     Форматирует значение для вставки в документ
     
@@ -156,6 +170,189 @@ def format_value(value: Any) -> str:
         return ""
     else:
         return str(value)
+
+def validate_excel_file(file):
+    """
+    Расширенная валидация Excel файла с подробным логированием
+    
+    Args:
+        file: Загруженный файл
+        
+    Returns:
+        Tuple[bool, str, Dict[str, Any]]: (успех, сообщение, дополнительные данные)
+    """
+    try:
+        logging.info(f"Начало валидации файла: {file.filename}")
+        
+        # Проверка расширения файла
+        if not file.filename.endswith(('.xlsx', '.xls')):
+            raise ValidationError(
+                message = "Неверный формат файла. Допускаются только .xlsx или .xls"
+                details={'filename': file.filename}
+                logging.error(message)
+                raise ExcelValidationError(message)
+
+        # Проверка размера файла
+        file_size = len(file.read())
+        if file_size > 10 * 1024 * 1024:  # 10MB
+            raise FileError(
+                message="Файл слишком большой. Максимальный размер 10MB",
+                details={'size': file_size, 'max_size': 10 * 1024 * 1024}
+            )
+        logging.info(f"Размер файла: {file_size / (1024*1024):.2f} MB")
+        
+        if file_size > 10 * 1024 * 1024:  # 10MB
+            raise FileError(
+                message = "Файл слишком большой. Максимальный размер 10MB"
+                details={'size': file_size, 'max_size': 10 * 1024 * 1024}
+                logging.error(message)
+                raise ExcelValidationError(message)
+            
+        file.seek(0)
+
+        # Чтение файла с помощью pandas
+        df = pd.read_excel(file)
+        logging.info(f"Файл успешно прочитан. Количество строк: {len(df)}")
+
+        # Проверка структуры и данных
+        validation_results = validate_excel_structure(df)
+        if not validation_results['is_valid']:
+            logging.error(f"Ошибка структуры: {validation_results['errors']}")
+            raise ExcelValidationError('\n'.join(validation_results['errors']))
+
+        # Валидация данных
+        data_validation = validate_excel_data(df)
+        if not data_validation['is_valid']:
+            logging.error(f"Ошибка данных: {data_validation['errors']}")
+            raise ExcelValidationError('\n'.join(data_validation['errors']))
+
+        return True, "Файл успешно проверен", {
+            'preview': df.head().to_dict(),
+            'summary': {
+                'total_rows': len(df),
+                'total_sum': df['price'].sum() if 'price' in df.columns else 0
+            }
+        }
+    
+    except (ValidationError, FileError) as e:
+        log_error(e, {'filename': file.filename})
+        raise
+
+    except Exception as e:
+        log_error(e, {'filename': file.filename})
+        raise FileError(f"Ошибка при обработке файла: {str(e)}")
+
+        # Подготовка превью данных
+        preview_data = {
+            'preview': df.head().to_dict(),
+            'summary': {
+                'total_rows': len(df),
+                'total_sum': df['price'].sum() if 'price' in df.columns else 0
+            }
+        }
+
+        logging.info("Валидация успешно завершена")
+        return True, "Файл успешно проверен", preview_data
+
+    except ExcelValidationError as e:
+        return False, str(e), {}
+    except Exception as e:
+        logging.exception("Непредвиденная ошибка при валидации")
+        return False, f"Ошибка при обработке файла: {str(e)}", {}
+
+def validate_excel_structure(df: pd.DataFrame) -> Dict[str, Any]:
+    """Проверка структуры Excel файла"""
+    required_columns = ['name', 'price', 'quantity']
+    errors = []
+
+    # Проверка наличия обязательных колонок
+    missing_columns = [col for col in required_columns if col not in df.columns]
+    if missing_columns:
+        errors.append(f"Отсутствуют обязательные колонки: {', '.join(missing_columns)}")
+
+    # Дополнительные проверки структуры
+    if len(df.columns) < len(required_columns):
+        errors.append("Недостаточно колонок в файле")
+
+    return {
+        'is_valid': len(errors) == 0,
+        'errors': errors
+    }
+
+def validate_excel_data(df: pd.DataFrame) -> Dict[str, Any]:
+    """Расширенная валидация данных в Excel файле"""
+    errors = []
+    
+    # Проверка цен
+    if 'price' in df.columns:
+        invalid_prices = df[~df['price'].apply(lambda x: isinstance(x, (int, float)) and x > 0)]
+        if not invalid_prices.empty:
+            errors.append(f"Неверные цены в строках: {invalid_prices.index.tolist()}")
+
+    # Проверка количества
+    if 'quantity' in df.columns:
+        invalid_quantities = df[~df['quantity'].apply(lambda x: isinstance(x, (int, float)) and x > 0)]
+        if not invalid_quantities.empty:
+            errors.append(f"Неверное количество в строках: {invalid_quantities.index.tolist()}")
+
+    # Проверка наименований
+    if 'name' in df.columns:
+        empty_names = df[df['name'].isna() | (df['name'] == '')]
+        if not empty_names.empty:
+            errors.append(f"Пустые наименования в строках: {empty_names.index.tolist()}")
+
+    return {
+        'is_valid': len(errors) == 0,
+        'errors': errors
+    }
+
+@shared_task
+def async_validate_excel_file(file_path: str) -> Dict[str, Any]:
+    """
+    Асинхронная валидация больших файлов через Celery
+    
+    Args:
+        file_path: Путь к файлу для валидации
+        
+    Returns:
+        Dict[str, Any]: Результат валидации
+    """
+    try:
+        logging.info(f"Начало асинхронной валидации: {file_path}")
+        
+        # Чтение файла порциями для больших файлов
+        chunk_size = 1000
+        chunks = pd.read_excel(file_path, chunksize=chunk_size)
+        
+        all_errors = []
+        total_rows = 0
+        
+        for chunk_num, chunk in enumerate(chunks, 1):
+            validation_result = validate_excel_data(chunk)
+            if not validation_result['is_valid']:
+                all_errors.extend(validation_result['errors'])
+            total_rows += len(chunk)
+            logging.info(f"Обработано {chunk_num * chunk_size} строк")
+
+        if all_errors:
+            return {
+                'status': 'error',
+                'errors': all_errors,
+                'total_rows': total_rows
+            }
+
+        return {
+            'status': 'success',
+            'message': 'Валидация успешно завершена',
+            'total_rows': total_rows
+        }
+
+    except Exception as e:
+        logging.exception("Ошибка при асинхронной валидации")
+        return {
+            'status': 'error',
+            'message': str(e)
+        }
 
 # Инициализация при импорте модуля
 setup_logging()

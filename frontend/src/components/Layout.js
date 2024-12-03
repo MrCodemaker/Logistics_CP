@@ -39,16 +39,45 @@ const lightAnimationConfig = {
     }
 };
 
+// Варианты анимаций для разных типов переходов
+const pageTransitions = {
+    default: {
+        initial: { opacity: 0, y: 20 },
+        animate: { opacity: 1, y: 0 },
+        exit: { opacity: 0, y: -20 },
+        transition: { duration: 0.3 }
+    },
+    slide: {
+        initial: { opacity: 0, x: 100 },
+        animate: { opacity: 1, x: 0 },
+        exit: { opacity: 0, x: -100 },
+        transition: { duration: 0.4 }
+    },
+    fade: {
+        initial: { opacity: 0 },
+        animate: { opacity: 1 },
+        exit: { opacity: 0 },
+        transition: { duration: 0.2 }
+    }
+};
+
 const Layout = ({ children }) => {
     const location = useLocation();
 
     // Определяем производительность устройства
     const isLowPerformance = window.navigator.hardwareConcurrency < 4 || 
                             /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
-
+    
     // Выбираем конфигурацию анимации
     const currentVariants = isLowPerformance ? lightAnimationConfig : pageVariants;
     const currentTransition = isLowPerformance ? lightAnimationConfig.transition : pageTransition;
+
+    // Выбираем тип анимации в зависимости от маршрута
+    const getTransitionType = (pathname) => {
+        if (pathname.includes('preview')) return 'slide';
+        if (pathname === '/') return 'fade';
+        return 'default';
+    };
 
     // Мемоизация функций
     const handleAnimationComplete = useCallback(() => {
@@ -60,6 +89,8 @@ const Layout = ({ children }) => {
     const handleAnimationStart = useCallback(() => {
         document.body.style.pointerEvents = 'none';
     }, []);
+
+    const transitionType = getTransitionType(location.pathname);
 
     return (
         <AnimatePresence mode="wait" initial={false}>
@@ -87,6 +118,13 @@ const Layout = ({ children }) => {
                     willChange: 'transform, opacity'
                 }}
             >
+            <motion.div
+                key={location.pathname}
+                {...pageTransitions[transitionType]}
+                className="min-h-screen bg-gray-50 dark:bg-gray-900"
+            >
+                {children}
+            </motion.div>    
                 <div className="container mx-auto px-4 py-8">
                     {children}
                 </div>

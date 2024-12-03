@@ -1,20 +1,78 @@
 import React, { useState } from 'react';
 import { proposalService } from '../services/api';
+import { useDropzone } from 'react-dropzone';
 import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
+import { notify } from '../utils/notifications';
+import ProgressBar from './ProgressBar';
 
 const UploadForm = ({ onUploadSuccess }) => {
     const [file, setFile] = useState(null);
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState('');
+    const [uploadProgress, setUploadProgress] = useState(0);
     const navigate = useNavigate();
+    const [previewData, setPreviewData] = useState(null);
 
-    // Функция для создания коммерческого предложения
+
+    const handleFileChange = (event) => {
+        const selectedFile = event.target.files[0];
+        if (selectedFile && (
+            selectedFile.type.includes('excel') ||
+            selectedFile.name.endsWith('.xlsx') ||
+            selectedFile.name.endsWith('.xls')
+        )) {
+            setFile(selectedFile);
+            setError('');
+            // Сразу запускаем валидацию при выборе файла
+            handleFileUpload(selectedFile);
+        } else {
+            setError('Пожалуйста, выберите файл Excel');
+            setFile(null);
+        }
+    };
+
+    // Функция валидации
+    const handleFileUpload = async (file) => {
+        setLoading(true);
+        setUploadProgress(0);
+        const formData = new FormData();
+        formData.append('file', file);
+
+        try {
+            const response = await axios.post('/api/validate-excel', formData, {
+                onUploadProgress: (progressEvent) => {
+                    const progress = (progressEvent.loaded / progressEvent.total) * 100;
+                    setUploadProgress(progress);
+                }
+            });
+
+            if (response.data.success) {
+                notify.success('Файл успешно проверен');
+                setPreviewData(response.data.preview);
+                setFile(file);
+            } else {
+                const error = response.data.error;
+                setError(error.message);
+                notify.error(error.message);
+            }
+        } catch (error) {
+            const errorMessage = error.response?.data?.error?.message || 'Ошибка при загрузке файла';
+            setError(errorMessage);
+            notify.error(errorMessage);
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    // Функция создания коммерческого предложения
     const createCommercialProposal = async (file) => {
         const formData = new FormData();
         formData.append('file', file);
+        
         try {
             const response = await axios.post('/api/create-proposal', formData);
+        
             if (response.data.success) {
                 // Автоматическое скачивание файла
                 const link = document.createElement('a');
@@ -30,21 +88,7 @@ const UploadForm = ({ onUploadSuccess }) => {
         }
     };
 
-    const handleFileChange = (event) => {
-        const selectedFile = event.target.files[0];
-        if (selectedFile && (
-            selectedFile.type.includes('excel') ||
-            selectedFile.name.endsWith('.xlsx') ||
-            selectedFile.name.endsWith('.xls')
-        )) {
-            setFile(selectedFile);
-            setError('');
-        } else {
-            setError('Пожалуйста, выберите файл Excel');
-            setFile(null);
-        }
-    };
-
+    // Функция отправки формы
     const handleSubmit = async (e) => {
         e.preventDefault();
         if (!file) return;
@@ -53,7 +97,15 @@ const UploadForm = ({ onUploadSuccess }) => {
         setError('');
 
         try {
-            // Сначала пытаемся создать коммерческое предложение
+            await handleFileUpload(file);
+        } catch (err) {
+            setError(err.message || 'Ошибка при загрузке файла');
+        } finally {
+            setLoading(false);
+        };
+
+        try {
+            // Пытаемся создать коммерческое предложение
             const result = await createCommercialProposal(file);
             
             if (result.success) {
