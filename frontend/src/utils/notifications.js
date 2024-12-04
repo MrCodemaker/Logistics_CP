@@ -17,5 +17,8 @@ export const notify = {
         closeOnClick: true,
         pauseOnHover: true,
         draggable: true
-    })
+    }),
+
+    info: (message) => toast.info(message),
+    warning: (message) => toast.warning(message);
 };

@@ -1,0 +1,101 @@
+from typing import Dict, Any
+import logging
+from enum import Enum
+from flask import jsonify
+from werkzeug.exceptions import HTTPException
+
+# Определяем типы ошибок
+class ErrorType(Enum):
+    VALIDATION = "validation"
+    AUTH = "auth"
+    FILE = "file"
+    SERVER = "server"
+    DATABASE = "database"
+    UNKNOWN = "unknown"
+
+class ApiError(Exception):
+    """Базовый класс для API ошибок"""
+    def __init__(self, message: str, error_type: ErrorType, status_code: int = 400, details: Dict = None):
+        super().__init__(message)
+        self.message = message
+        self.error_type = error_type
+        self.status_code = status_code
+        self.details = details or {}
+
+class ValidationError(ApiError):
+    """Ошибка валидации"""
+    def __init__(self, message: str, details: Dict = None):
+        super().__init__(
+            message=message,
+            error_type=ErrorType.VALIDATION,
+            status_code=400,
+            details=details
+        )
+
+class FileError(ApiError):
+    """Ошибка обработки файла"""
+    def __init__(self, message: str, details: Dict = None):
+        super().__init__(
+            message=message,
+            error_type=ErrorType.FILE,
+            status_code=400,
+            details=details
+        )
+
+class AuthError(ApiError):
+    """Ошибка авторизации"""
+    def __init__(self, message: str = "Необходима авторизация"):
+        super().__init__(
+            message=message,
+            error_type=ErrorType.AUTH,
+            status_code=401
+        )
+
+def setup_error_handling(app):
+    """Настройка обработки ошибок для Flask приложения"""
+    
+    @app.errorhandler(ApiError)
+    def handle_api_error(error: ApiError):
+        response = {
+            'success': False,
+            'error': {
+                'type': error.error_type.value,
+                'message': error.message,
+                'details': error.details
+            }
+        }
+        return jsonify(response), error.status_code
+
+    @app.errorhandler(HTTPException)
+    def handle_http_error(error: HTTPException):
+        response = {
+            'success': False,
+            'error': {
+                'type': ErrorType.SERVER.value,
+                'message': error.description,
+                'code': error.code
+            }
+        }
+        return jsonify(response), error.code
+
+    @app.errorhandler(Exception)
+    def handle_unexpected_error(error: Exception):
+        logging.exception("Неожиданная ошибка: %s", str(error))
+        response = {
+            'success': False,
+            'error': {
+                'type': ErrorType.UNKNOWN.value,
+                'message': 'Внутренняя ошибка сервера'
+            }
+        }
+        return jsonify(response), 500
+
+def log_error(error: Exception, additional_info: Dict[str, Any] = None):
+    """Логирование ошибок"""
+    error_info = {
+        'type': getattr(error, 'error_type', ErrorType.UNKNOWN).value,
+        'message': str(error),
+        'additional_info': additional_info or {}
+    }
+    logging.error("API Error: %s", error_info)
+    return error_info

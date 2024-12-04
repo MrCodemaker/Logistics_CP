@@ -1,6 +1,6 @@
 import React, { Suspense } from 'react';
 import { ToastContainer } from 'react-toastify';
-import 'react-toastify/styles/ReactToastify.css';
+import 'react-toastify/dist/ReactToastify.css';
 import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
 import Header from './components/Header';
 import Layout from './components/Layout';
@@ -68,7 +68,7 @@ function App() {
                     </Routes>
                 </Suspense>
             </Layout>
-            <ToastContainer /> /* Добавляем контейнер для уведомлений
+            <ToastContainer /> /* Контейнер для уведомлений
        
         </Router>
     );
