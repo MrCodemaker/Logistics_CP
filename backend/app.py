@@ -87,5 +87,3 @@ if __name__ == '__main__':
         port=int(os.getenv('FLASK_PORT', 5000)),
         debug=debug_mode
     )
-
-register_routes(app)

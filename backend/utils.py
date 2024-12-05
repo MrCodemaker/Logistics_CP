@@ -11,19 +11,22 @@ from datetime import datetime
 from flask import logging, render_template
 from celery import shared_task
 from .error_handler import ValidationError, FileError, log_error
+from typing import List, Optional, Dict, Any
+from pydantic import BaseModel, validator, ValidationError as PydanticValidationError
+from openpyxl import load_workbook
 
 
-# Добавляем кастомные исключения для обработки ошибок"""
+# Добавляем кастомные исключения для обработки ошибок
 class ExcelValidationError(Exception):
-    """Кастомное исключение для ошибок валидации"""
+    # Кастомное исключение для ошибок валидации
     pass
 
 class ExcelProcessingError(Exception):
-    """Кастомное исключение для ошибок обработки"""
+    # Кастомное исключение для ошибок обработки
     pass
 
+# Настраиваем систему логирования с ротацией файлов
 def setup_logging():
-    """Настраиваем систему логирования с ротацией файлов"""
     log_dir = Path("logs")
     log_dir.mkdir(exist_ok=True)
     log_file = log_dir / f"app_{datetime.now().strftime('%Y%m%d')}.log"
@@ -70,6 +73,26 @@ def load_config(config_path: str) -> Dict:
     Returns:
         Optional[Dict[str, Any]]: Словарь с извлеченными данными или None при ошибке
     """
+
+class ExcelData(BaseModel):
+    step_1: str
+    step_2: str
+    step_3: str
+    step_1_deadline: str #  Пока str, позже изменим на datetime
+    step_2_deadline: str #  Пока str, позже изменим на datetime
+    step_3_deadline: str #  Пока str, позже изменим на datetime
+    total_deadline: str  # Пока str, позже изменим на datetime
+    tax: float
+    total_tax: float
+
+    @validator('tax', 'total_tax')
+    def check_positive(cls, value):
+        if value < 0:
+            raise ValueError("Значение должно быть положительным")
+        return value
+
+    # Добавить валидаторы для дат позже, после выбора формата
+
 def process_excel(file_path: str, config: Dict) -> Optional[Dict[str, Any]]:
     try:
         # Проверяем существование файла
@@ -107,6 +130,20 @@ def process_excel(file_path: str, config: Dict) -> Optional[Dict[str, Any]]:
     except Exception as e:
         logging.exception("Ошибка при обработке Excel файла")
         return None
+    
+# Валидация данных
+try:
+    validated_data = ExcelData(**data)  # Валидация с помощью Pydantic
+    return True, None, validated_data.dict()
+except PydanticValidationError as e:
+    errors = [f"{err['loc'][0]}: {err['msg']}" for err in e.errors()]
+    return False, "\n".join(errors), None
+
+except FileNotFoundError:
+        return False, f"Файл не найден: {file_path}", None
+    except Exception as e:
+        # ... (логирование и обработка других ошибок)
+        return False, str(e), None
 
 """
     Генерирует Word-документ на основе шаблона и данных

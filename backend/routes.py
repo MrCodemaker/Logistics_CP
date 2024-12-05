@@ -7,16 +7,17 @@ import os
 from .models import db, User, ProposalHistory
 from .utils import load_config, process_excel, generate_word
 from .middleware.auth import token_required
+from .utils import process_excel, ExcelValidationError
 
 # Создаем Blueprint для маршрутов
 bp = Blueprint('routes', __name__)
 
 @bp.route("/api/create-proposal", methods=["POST"])
 @token_required
+
+
+# Endpoint для создания коммерческого предложения из загруженного Excel-файла
 def create_proposal(current_user):
-    """
-    Endpoint для создания коммерческого предложения из загруженного Excel-файла
-    """
     try:
         # Проверяем, что файл был отправлен
         if 'file' not in request.files:
@@ -56,13 +57,20 @@ def create_proposal(current_user):
             
             # Загружаем конфигурацию и обрабатываем файл
             config = load_config('config.json')
-            data = process_excel(str(excel_path), config)
+            success, error_msg, data = process_excel(str(excel_path), config)
             
             if not data:
                 proposal.update_status(ProposalHistory.STATUS_ERROR)
                 return jsonify({'error': 'Ошибка при обработке Excel файла'}), 400
                 
             proposal.data = data
+
+            if not success:
+             # Обрабатываем ошибку валидации
+            if isinstance(error_msg, ExcelValidationError):
+                return jsonify({'error': error_msg.details}), 400
+            else:
+                return jsonify({'error': error_msg}), 400 # Или 500, если это внутренняя ошибка
             
             # Генерируем уникальное имя для выходного файла
             output_filename = f"proposal_{proposal.id}_{int(time.time())}.docx"
